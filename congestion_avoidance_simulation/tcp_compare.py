@@ -199,7 +199,7 @@ SCENARIOS = [
 ]
 
 DT = 0.1  # 100 ms resolution
-SIM_DURATION = 120.0  # seconds for richer time series detail
+SIM_DURATION = 60.0  # 1-minute experiment horizon for quicker iterations
 STEPS = int(SIM_DURATION / DT)
 MSS_BYTES = 1460
 
@@ -398,42 +398,32 @@ def main():
     plt.savefig(output_dir / "fairness_vs_scenario.png", dpi=200)
 
     if scenario_cwnd_series and scenario_time is not None:
-        plt.figure(figsize=(11, 5.5))
-        for name, series in scenario_cwnd_series.items():
-            color = ALGORITHM_COLORS.get(name)
-            plot_kwargs = {"label": name, "linewidth": 1.6}
-            if color is not None:
-                plot_kwargs["color"] = color
-            plt.plot(scenario_time, series, **plot_kwargs)
-        plt.xlabel("Time (s)")
-        plt.ylabel("Congestion Window (packets)")
-        plt.title("Congestion Window Evolution (Scenario 1)")
-        plt.legend()
-        plt.grid(linestyle="--", linewidth=0.6, alpha=0.6)
-        plt.tight_layout()
-        plt.savefig(output_dir / "cwnd_evolution_example.png", dpi=220)
-
-        plt.figure(figsize=(11, 5.5))
-        for name, series in scenario_cwnd_series.items():
-            series_array = np.asarray(series, dtype=float)
-            max_value = float(series_array.max()) if series_array.size else 0.0
-            if max_value > 0:
-                normalized_series = series_array / max_value
-            else:
-                normalized_series = series_array
-            color = ALGORITHM_COLORS.get(name)
-            plot_kwargs = {"label": name, "linewidth": 1.6}
-            if color is not None:
-                plot_kwargs["color"] = color
-            plt.plot(scenario_time, normalized_series, **plot_kwargs)
-        plt.xlabel("Time (s)")
-        plt.ylabel("Normalized Congestion Window")
-        plt.title("Normalized Congestion Window Evolution (Scenario 1)")
-        plt.ylim(0, 1.05)
-        plt.legend()
-        plt.grid(linestyle="--", linewidth=0.6, alpha=0.6)
-        plt.tight_layout()
-        plt.savefig(output_dir / "cwnd_evolution_normalized.png", dpi=220)
+        algorithms = list(scenario_cwnd_series.keys())
+        fig, axes = plt.subplots(
+            len(algorithms),
+            1,
+            figsize=(11, 3.0 * len(algorithms)),
+            sharex=True,
+        )
+        if len(algorithms) == 1:
+            axes = [axes]
+        for ax, name in zip(axes, algorithms):
+            series = scenario_cwnd_series[name]
+            color = ALGORITHM_COLORS.get(name, "#333333")
+            ax.plot(
+                scenario_time,
+                series,
+                label=name,
+                linewidth=2.0,
+                color=color,
+            )
+            ax.set_ylabel("CWND (pkts)")
+            ax.set_title(name, loc="left", fontweight="bold")
+            ax.grid(linestyle="--", linewidth=0.6, alpha=0.6)
+        axes[-1].set_xlabel("Time (s)")
+        fig.suptitle("Congestion Window Evolution by Algorithm (Scenario 1)", fontsize=14)
+        fig.tight_layout(rect=(0, 0, 1, 0.97))
+        fig.savefig(output_dir / "cwnd_evolution_example.png", dpi=220)
 
     print("\nKey Observations:")
     df_sorted = df.sort_values(["Scenario", "Avg Throughput (Mbps)"], ascending=[True, False])
