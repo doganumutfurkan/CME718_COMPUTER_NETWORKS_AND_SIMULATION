@@ -9,7 +9,7 @@ import pandas as pd
 
 MSS_BYTES = 1460
 DT = 0.1  # seconds
-SIM_DURATION = 60.0  # seconds
+SIM_DURATION = 300.0  # seconds
 STEPS = int(SIM_DURATION / DT)
 RNG_SEED = 1337
 DEFAULT_COLORS = [
@@ -321,25 +321,44 @@ def plot_throughput(df: pd.DataFrame, output_dir: pathlib.Path) -> None:
     algorithms = ALGORITHM_COLOR_ORDER
     indices = np.arange(len(scenarios))
     width = 0.8 / max(len(algorithms), 1)
-    fig, ax = plt.subplots(figsize=(10, 5), dpi=140)
+    fig, ax = plt.subplots(figsize=(11, 5.5), dpi=160)
+    bar_containers = []
     for offset, algorithm in enumerate(algorithms):
         values = [agg.get((scenario, algorithm), 0.0) for scenario in scenarios]
         color = ALGORITHM_COLORS.get(algorithm, DEFAULT_COLORS[offset % len(DEFAULT_COLORS)])
-        ax.bar(
+        container = ax.bar(
             indices + offset * width,
             values,
             width=width,
             label=algorithm,
             color=color,
             edgecolor="black",
-            linewidth=0.5,
+            linewidth=0.6,
         )
+        bar_containers.append(container)
     ax.set_xticks(indices + width * (len(algorithms) - 1) / 2)
     ax.set_xticklabels(scenarios, rotation=0)
     ax.set_ylabel("Average Throughput (Mbps)")
     ax.set_title("Average Throughput by Scenario and Algorithm")
-    ax.legend(ncol=2, frameon=False)
-    ax.grid(True, axis="y", linestyle="--", alpha=0.3)
+    ax.legend(ncol=2, frameon=False, loc="upper left", bbox_to_anchor=(1.01, 1.0))
+    ax.grid(True, axis="y", linestyle="--", alpha=0.35)
+    ax.set_facecolor("#f8f8f8")
+
+    for container in bar_containers:
+        for bar in container:
+            height = bar.get_height()
+            if height <= 0:
+                continue
+            ax.annotate(
+                f"{height:.1f}",
+                xy=(bar.get_x() + bar.get_width() / 2, height),
+                xytext=(0, 3),
+                textcoords="offset points",
+                ha="center",
+                va="bottom",
+                fontsize=8,
+                color="#333333",
+            )
     fig.tight_layout()
     fig.savefig(output_dir / "throughput_vs_algorithm.png", bbox_inches="tight")
     plt.close(fig)
@@ -348,12 +367,25 @@ def plot_throughput(df: pd.DataFrame, output_dir: pathlib.Path) -> None:
 def plot_fairness(fairness: Dict[str, float], output_dir: pathlib.Path) -> None:
     scenarios = list(fairness.keys())
     values = [fairness[name] for name in scenarios]
-    fig, ax = plt.subplots(figsize=(7.5, 4.5), dpi=140)
-    ax.bar(scenarios, values, color="#737373", edgecolor="black", linewidth=0.5)
+    fig, ax = plt.subplots(figsize=(8.5, 4.75), dpi=160)
+    bars = ax.bar(scenarios, values, color="#5F9EA0", edgecolor="black", linewidth=0.6)
     ax.set_ylim(0, 1.05)
     ax.set_ylabel("Jain's Fairness Index")
     ax.set_title("Fairness Across Scenarios")
-    ax.grid(True, axis="y", linestyle="--", alpha=0.3)
+    ax.grid(True, axis="y", linestyle="--", alpha=0.35)
+    ax.set_facecolor("#f8f8f8")
+    for bar in bars:
+        height = bar.get_height()
+        ax.annotate(
+            f"{height:.3f}",
+            xy=(bar.get_x() + bar.get_width() / 2, height),
+            xytext=(0, 3),
+            textcoords="offset points",
+            ha="center",
+            va="bottom",
+            fontsize=8,
+            color="#333333",
+        )
     fig.tight_layout()
     fig.savefig(output_dir / "fairness_vs_scenario.png", bbox_inches="tight")
     plt.close(fig)
@@ -366,22 +398,23 @@ def plot_cwnd_example(
 ) -> None:
     series = cwnd_timeseries[scenario_name]
     time_axis = np.linspace(0.0, SIM_DURATION, num=STEPS)
-    fig, ax = plt.subplots(figsize=(10, 5.5), dpi=160)
+    fig, ax = plt.subplots(figsize=(11, 6), dpi=180)
     for idx, (algo, values) in enumerate(series.items()):
         color = ALGORITHM_COLORS.get(algo, DEFAULT_COLORS[idx % len(DEFAULT_COLORS)])
         ax.plot(
             time_axis,
             values,
             label=algo,
-            linewidth=2.0,
+            linewidth=2.2,
             color=color,
-            alpha=0.9,
+            alpha=0.95,
         )
     ax.set_xlabel("Time (s)")
     ax.set_ylabel("CWND (packets)")
     ax.set_title(f"Congestion Window Evolution — {scenario_name}")
     ax.grid(True, linestyle="--", alpha=0.35)
-    ax.legend(loc="upper right", frameon=False)
+    ax.legend(loc="upper left", frameon=False, ncol=2)
+    ax.set_facecolor("#f8f8f8")
     fig.tight_layout()
     fig.savefig(output_dir / "cwnd_evolution_example.png", bbox_inches="tight")
     plt.close(fig)
@@ -398,17 +431,18 @@ def plot_cwnd_per_algorithm(
     n_algos = len(algorithms)
     cols = 2
     rows = math.ceil(n_algos / cols)
-    fig, axes = plt.subplots(rows, cols, figsize=(12, 3.5 * rows), dpi=160, sharex=True)
+    fig, axes = plt.subplots(rows, cols, figsize=(12.5, 3.8 * rows), dpi=180, sharex=True)
     axes = np.atleast_1d(axes).reshape(rows, cols)
     for idx, algo in enumerate(algorithms):
         row, col = divmod(idx, cols)
         ax = axes[row][col]
         values = series[algo]
         color = ALGORITHM_COLORS.get(algo, DEFAULT_COLORS[idx % len(DEFAULT_COLORS)])
-        ax.plot(time_axis, values, color=color, linewidth=2.0)
+        ax.plot(time_axis, values, color=color, linewidth=2.2)
         ax.set_title(algo)
         ax.set_ylabel("CWND")
         ax.grid(True, linestyle="--", alpha=0.3)
+        ax.set_facecolor("#f8f8f8")
     for idx in range(n_algos, rows * cols):
         row, col = divmod(idx, cols)
         axes[row][col].axis("off")
