@@ -1,5 +1,7 @@
 
 import math
+import pathlib
+
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -374,6 +376,23 @@ def main():
         plt.legend()
         plt.tight_layout()
         plt.savefig(output_dir / "cwnd_evolution_example.png")
+
+        plt.figure(figsize=(10, 5))
+        for name, series in scenario_cwnd_series.items():
+            series_array = np.asarray(series, dtype=float)
+            max_value = float(series_array.max()) if series_array.size else 0.0
+            if max_value > 0:
+                normalized_series = series_array / max_value
+            else:
+                normalized_series = series_array
+            plt.plot(scenario_time, normalized_series, label=name)
+        plt.xlabel("Time (s)")
+        plt.ylabel("Normalized Congestion Window")
+        plt.title("Normalized Congestion Window Evolution (Scenario 1)")
+        plt.ylim(0, 1.05)
+        plt.legend()
+        plt.tight_layout()
+        plt.savefig(output_dir / "cwnd_evolution_normalized.png")
 
     print("\nKey Observations:")
     df_sorted = df.sort_values(["Scenario", "Avg Throughput (Mbps)"], ascending=[True, False])
