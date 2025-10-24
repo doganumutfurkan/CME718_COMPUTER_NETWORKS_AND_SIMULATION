@@ -628,11 +628,6 @@ def main() -> None:
         print(f"  {name}: {value:.3f}")
     print()
 
-    print("Sample parameter sets for further experimentation:")
-    sample_df = pd.DataFrame(SAMPLE_PARAMETER_SETS)
-    print(sample_df.to_string(index=False))
-    print()
-
     throughput_order = df.groupby("Algorithm")["Avg Throughput (Mbps)"].mean().sort_values(ascending=False)
     leading = throughput_order.index[0]
     trailing = throughput_order.index[-1]
