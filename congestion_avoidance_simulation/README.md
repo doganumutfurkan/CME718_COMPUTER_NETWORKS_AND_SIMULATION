@@ -7,7 +7,6 @@ This module implements a discrete-time simulator that contrasts five TCP congest
 ```
 congestion_avoidance_simulation/
 ├── tcp_compare.py           # Main entry point for running simulations
-├── placeholder.txt          # Reserved for additional notes/resources
 ├── findings/                # Auto-generated outputs from the simulator
 │   ├── results.csv          # Tabulated metrics per algorithm and scenario
 │   ├── throughput_vs_algorithm.png
