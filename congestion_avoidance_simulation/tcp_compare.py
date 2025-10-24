@@ -1,7 +1,7 @@
 import math
 import pathlib
 from dataclasses import dataclass
-from typing import Dict, List, Sequence, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -64,12 +64,19 @@ class Scenario:
 
 
 class TCPFlow:
-    def __init__(self, name: str, rtt_ms: float, mss_bytes: int = MSS_BYTES) -> None:
+    def __init__(
+        self,
+        name: str,
+        rtt_ms: float,
+        mss_bytes: int = MSS_BYTES,
+        cwnd_cap: Optional[float] = None,
+    ) -> None:
         self.name = name
         self.rtt_sec = rtt_ms / 1000.0
         self.mss_bytes = mss_bytes
         self.cwnd = 1.0
         self.ssthresh = 64.0
+        self.cwnd_cap = cwnd_cap
 
     # --- helper methods -------------------------------------------------
     def estimate_rate_bps(self) -> float:
@@ -78,6 +85,11 @@ class TCPFlow:
 
     def effective_cwnd(self) -> float:
         return max(self.cwnd, 1.0)
+
+    def clamp_cwnd(self) -> None:
+        self.cwnd = max(self.cwnd, 1.0)
+        if self.cwnd_cap is not None:
+            self.cwnd = min(self.cwnd, self.cwnd_cap)
 
     # --- congestion control hooks --------------------------------------
     def on_ack(self, acked_packets: int, attempted_packets: int, dt: float) -> None:
@@ -88,8 +100,13 @@ class TCPFlow:
 
 
 class TCPTahoe(TCPFlow):
-    def __init__(self, rtt_ms: float, mss_bytes: int = MSS_BYTES) -> None:
-        super().__init__("TCP Tahoe", rtt_ms, mss_bytes)
+    def __init__(
+        self,
+        rtt_ms: float,
+        mss_bytes: int = MSS_BYTES,
+        cwnd_cap: Optional[float] = None,
+    ) -> None:
+        super().__init__("TCP Tahoe", rtt_ms, mss_bytes, cwnd_cap)
 
     def on_ack(self, acked_packets: int, attempted_packets: int, dt: float) -> None:
         if acked_packets <= 0:
@@ -107,8 +124,13 @@ class TCPTahoe(TCPFlow):
 
 
 class TCPReno(TCPFlow):
-    def __init__(self, rtt_ms: float, mss_bytes: int = MSS_BYTES) -> None:
-        super().__init__("TCP Reno", rtt_ms, mss_bytes)
+    def __init__(
+        self,
+        rtt_ms: float,
+        mss_bytes: int = MSS_BYTES,
+        cwnd_cap: Optional[float] = None,
+    ) -> None:
+        super().__init__("TCP Reno", rtt_ms, mss_bytes, cwnd_cap)
 
     def on_ack(self, acked_packets: int, attempted_packets: int, dt: float) -> None:
         if acked_packets <= 0:
@@ -126,8 +148,13 @@ class TCPReno(TCPFlow):
 
 
 class TCPNewReno(TCPReno):
-    def __init__(self, rtt_ms: float, mss_bytes: int = MSS_BYTES) -> None:
-        super().__init__(rtt_ms, mss_bytes)
+    def __init__(
+        self,
+        rtt_ms: float,
+        mss_bytes: int = MSS_BYTES,
+        cwnd_cap: Optional[float] = None,
+    ) -> None:
+        super().__init__(rtt_ms, mss_bytes, cwnd_cap)
         self.name = "TCP NewReno"
         self._in_recovery = False
 
@@ -154,8 +181,13 @@ class TCPNewReno(TCPReno):
 
 
 class TCPCubic(TCPFlow):
-    def __init__(self, rtt_ms: float, mss_bytes: int = MSS_BYTES) -> None:
-        super().__init__("TCP Cubic", rtt_ms, mss_bytes)
+    def __init__(
+        self,
+        rtt_ms: float,
+        mss_bytes: int = MSS_BYTES,
+        cwnd_cap: Optional[float] = None,
+    ) -> None:
+        super().__init__("TCP Cubic", rtt_ms, mss_bytes, cwnd_cap)
         self.C = 0.4
         self.beta = 0.3
         self.time_since_loss = 0.0
@@ -165,7 +197,10 @@ class TCPCubic(TCPFlow):
         if self.w_max <= 0.0:
             return max(self.cwnd, 1.0)
         k = (self.w_max * (1.0 - self.beta) / self.C) ** (1.0 / 3.0)
-        return self.C * (self.time_since_loss - k) ** 3 + self.w_max
+        target = self.C * (self.time_since_loss - k) ** 3 + self.w_max
+        if self.cwnd_cap is not None:
+            return min(target, self.cwnd_cap)
+        return target
 
     def on_ack(self, acked_packets: int, attempted_packets: int, dt: float) -> None:
         self.time_since_loss += dt
@@ -173,20 +208,28 @@ class TCPCubic(TCPFlow):
             return
         additive = acked_packets / max(self.cwnd, 1.0)
         target = self.cubic_target()
-        self.cwnd += max(additive, target - self.cwnd)
+        delta = max(target - self.cwnd, 0.0)
+        rtt_fraction = min(dt / max(self.rtt_sec, 1e-6), 1.0)
+        self.cwnd += additive + 0.25 * delta * rtt_fraction
 
     def on_loss(self, lost_packets: int, attempted_packets: int) -> None:
         if lost_packets <= 0:
             return
-        self.w_max = max(self.cwnd, 1.0)
+        capped = self.cwnd_cap if self.cwnd_cap is not None else float("inf")
+        self.w_max = max(min(self.cwnd, capped), 1.0)
         self.cwnd *= (1.0 - self.beta)
         self.ssthresh = max(self.cwnd, 1.0)
         self.time_since_loss = 0.0
 
 
 class TCPFriendlyRateControl(TCPFlow):
-    def __init__(self, rtt_ms: float, mss_bytes: int = MSS_BYTES) -> None:
-        super().__init__("TFRC", rtt_ms, mss_bytes)
+    def __init__(
+        self,
+        rtt_ms: float,
+        mss_bytes: int = MSS_BYTES,
+        cwnd_cap: Optional[float] = None,
+    ) -> None:
+        super().__init__("TFRC", rtt_ms, mss_bytes, cwnd_cap)
         self.send_rate_bps = self.estimate_rate_bps()
 
     def effective_cwnd(self) -> float:
@@ -262,12 +305,17 @@ def allocate_packets(
 def simulate_scenario(
     scenario: Scenario, rng: np.random.Generator
 ) -> Tuple[List[Dict[str, float]], float, Dict[str, List[float]]]:
+    bdp_packets = (
+        scenario.bandwidth_mbps * 1e6 * (scenario.rtt_ms / 1000.0) / (MSS_BYTES * 8.0)
+    )
+    cwnd_cap = max(1.0, 1.1 * bdp_packets)
+
     flows: List[TCPFlow] = [
-        TCPTahoe(scenario.rtt_ms),
-        TCPReno(scenario.rtt_ms),
-        TCPNewReno(scenario.rtt_ms),
-        TCPCubic(scenario.rtt_ms),
-        TCPFriendlyRateControl(scenario.rtt_ms),
+        TCPTahoe(scenario.rtt_ms, cwnd_cap=cwnd_cap),
+        TCPReno(scenario.rtt_ms, cwnd_cap=cwnd_cap),
+        TCPNewReno(scenario.rtt_ms, cwnd_cap=cwnd_cap),
+        TCPCubic(scenario.rtt_ms, cwnd_cap=cwnd_cap),
+        TCPFriendlyRateControl(scenario.rtt_ms, cwnd_cap=cwnd_cap),
     ]
 
     flow_stats: Dict[str, Dict[str, List[float]]] = {
@@ -283,6 +331,8 @@ def simulate_scenario(
             flow.on_ack(acked, attempted, DT)
             if lost > 0:
                 flow.on_loss(lost, attempted)
+
+            flow.clamp_cwnd()
 
             flow_stats[flow.name]["cwnd"].append(flow.effective_cwnd())
             flow_stats[flow.name]["throughput"].append(throughput_mbps)
