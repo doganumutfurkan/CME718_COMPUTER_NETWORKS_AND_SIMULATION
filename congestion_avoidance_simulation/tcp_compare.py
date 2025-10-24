@@ -34,6 +34,27 @@ ALGORITHM_COLORS: Dict[str, str] = {
 }
 
 
+def configure_matplotlib() -> None:
+    plt.rcParams.update(
+        {
+            "figure.dpi": 190,
+            "savefig.dpi": 230,
+            "axes.titlesize": 14,
+            "axes.labelsize": 12,
+            "axes.titleweight": "semibold",
+            "axes.edgecolor": "#333333",
+            "axes.spines.top": False,
+            "axes.spines.right": False,
+            "axes.grid": False,
+            "grid.linestyle": "--",
+            "grid.alpha": 0.35,
+            "legend.fontsize": 10,
+            "xtick.labelsize": 11,
+            "ytick.labelsize": 11,
+        }
+    )
+
+
 @dataclass(frozen=True)
 class Scenario:
     name: str
@@ -321,7 +342,7 @@ def plot_throughput(df: pd.DataFrame, output_dir: pathlib.Path) -> None:
     algorithms = ALGORITHM_COLOR_ORDER
     indices = np.arange(len(scenarios))
     width = 0.8 / max(len(algorithms), 1)
-    fig, ax = plt.subplots(figsize=(11, 5.5), dpi=160)
+    fig, ax = plt.subplots(figsize=(11.5, 5.75), dpi=190)
     bar_containers = []
     for offset, algorithm in enumerate(algorithms):
         values = [agg.get((scenario, algorithm), 0.0) for scenario in scenarios]
@@ -342,7 +363,11 @@ def plot_throughput(df: pd.DataFrame, output_dir: pathlib.Path) -> None:
     ax.set_title("Average Throughput by Scenario and Algorithm")
     ax.legend(ncol=2, frameon=False, loc="upper left", bbox_to_anchor=(1.01, 1.0))
     ax.grid(True, axis="y", linestyle="--", alpha=0.35)
-    ax.set_facecolor("#f8f8f8")
+    ax.set_facecolor("#fdfdfd")
+    ax.spines["left"].set_visible(True)
+    ax.spines["bottom"].set_visible(True)
+    ax.spines["left"].set_color("#444444")
+    ax.spines["bottom"].set_color("#444444")
 
     for container in bar_containers:
         for bar in container:
@@ -367,13 +392,19 @@ def plot_throughput(df: pd.DataFrame, output_dir: pathlib.Path) -> None:
 def plot_fairness(fairness: Dict[str, float], output_dir: pathlib.Path) -> None:
     scenarios = list(fairness.keys())
     values = [fairness[name] for name in scenarios]
-    fig, ax = plt.subplots(figsize=(8.5, 4.75), dpi=160)
-    bars = ax.bar(scenarios, values, color="#5F9EA0", edgecolor="black", linewidth=0.6)
-    ax.set_ylim(0, 1.05)
+    colors = [DEFAULT_COLORS[idx % len(DEFAULT_COLORS)] for idx in range(len(scenarios))]
+    fig, ax = plt.subplots(figsize=(9, 4.75), dpi=190)
+    bars = ax.bar(scenarios, values, color=colors, edgecolor="black", linewidth=0.7)
+    upper = max(1.0, max(values) * 1.05)
+    ax.set_ylim(0, min(1.05, upper))
     ax.set_ylabel("Jain's Fairness Index")
     ax.set_title("Fairness Across Scenarios")
     ax.grid(True, axis="y", linestyle="--", alpha=0.35)
-    ax.set_facecolor("#f8f8f8")
+    ax.set_facecolor("#fdfdfd")
+    for spine in ("left", "bottom"):
+        ax.spines[spine].set_visible(True)
+    ax.spines["left"].set_color("#444444")
+    ax.spines["bottom"].set_color("#444444")
     for bar in bars:
         height = bar.get_height()
         ax.annotate(
@@ -386,6 +417,7 @@ def plot_fairness(fairness: Dict[str, float], output_dir: pathlib.Path) -> None:
             fontsize=8,
             color="#333333",
         )
+    ax.margins(x=0.05)
     fig.tight_layout()
     fig.savefig(output_dir / "fairness_vs_scenario.png", bbox_inches="tight")
     plt.close(fig)
@@ -414,7 +446,9 @@ def plot_cwnd_example(
     ax.set_title(f"Congestion Window Evolution — {scenario_name}")
     ax.grid(True, linestyle="--", alpha=0.35)
     ax.legend(loc="upper left", frameon=False, ncol=2)
-    ax.set_facecolor("#f8f8f8")
+    ax.set_facecolor("#fdfdfd")
+    ax.spines["left"].set_color("#444444")
+    ax.spines["bottom"].set_color("#444444")
     fig.tight_layout()
     fig.savefig(output_dir / "cwnd_evolution_example.png", bbox_inches="tight")
     plt.close(fig)
@@ -442,7 +476,9 @@ def plot_cwnd_per_algorithm(
         ax.set_title(algo)
         ax.set_ylabel("CWND")
         ax.grid(True, linestyle="--", alpha=0.3)
-        ax.set_facecolor("#f8f8f8")
+        ax.set_facecolor("#fdfdfd")
+        ax.spines["left"].set_color("#444444")
+        ax.spines["bottom"].set_color("#444444")
     for idx in range(n_algos, rows * cols):
         row, col = divmod(idx, cols)
         axes[row][col].axis("off")
@@ -486,6 +522,7 @@ SAMPLE_PARAMETER_SETS = [
 
 def main() -> None:
     output_dir = pathlib.Path(__file__).resolve().parent
+    configure_matplotlib()
     rng = np.random.default_rng(RNG_SEED)
 
     scenarios = [
