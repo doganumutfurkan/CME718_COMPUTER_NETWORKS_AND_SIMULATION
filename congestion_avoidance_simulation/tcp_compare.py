@@ -198,13 +198,18 @@ SCENARIOS = [
     },
 ]
 
-DT = 0.1  # 100 ms
-SIM_DURATION = 60.0  # seconds
+DT = 0.1  # 100 ms resolution
+SIM_DURATION = 120.0  # seconds for richer time series detail
 STEPS = int(SIM_DURATION / DT)
 MSS_BYTES = 1460
 
-np.random.seed(42)
-
+ALGORITHM_COLORS = {
+    "TCP Tahoe": "#1f77b4",
+    "TCP Reno": "#ff7f0e",
+    "TCP NewReno": "#2ca02c",
+    "TCP Cubic": "#d62728",
+    "TFRC": "#9467bd",
+}
 
 def jains_fairness(values):
     values = np.array(values, dtype=float)
@@ -229,7 +234,7 @@ def instantiate_flows(scenario):
     }
 
 
-def run_scenario(scenario):
+def run_scenario(scenario, rng):
     flows = instantiate_flows(scenario)
     capacity_bps = scenario["bandwidth_mbps"] * 1e6
     loss_prob = scenario["loss_percent"] / 100.0
@@ -262,7 +267,7 @@ def run_scenario(scenario):
                 ),
             )
 
-            acked_packets = np.random.binomial(packets_attempted, effective_success)
+            acked_packets = rng.binomial(packets_attempted, effective_success)
             lost_packets = packets_attempted - acked_packets
 
             flow.on_ack(acked_packets, packets_attempted, DT)
@@ -312,19 +317,20 @@ def run_scenario(scenario):
 
 
 def main():
+    rng = np.random.default_rng(42)
     all_results = []
     scenario_cwnd_series = {}
     scenario_time = None
 
     for scenario in SCENARIOS:
-        data, time_points, cwnd_records = run_scenario(scenario)
+        data, time_points, cwnd_records = run_scenario(scenario, rng)
         all_results.extend(data)
         if scenario["id"] == 1:
             scenario_cwnd_series = {name: cwnd_records[name] for name in cwnd_records}
             scenario_time = time_points
 
     df = pd.DataFrame(all_results)
-    output_dir = pathlib.Path("congestion_avoidance_simulation")
+    output_dir = pathlib.Path(__file__).resolve().parent
     output_dir.mkdir(parents=True, exist_ok=True)
     df.to_csv(output_dir / "results.csv", index=False)
 
@@ -350,34 +356,64 @@ def main():
     throughput_by_algorithm = (
         df.groupby("Algorithm")["Avg Throughput (Mbps)"].mean().sort_values()
     )
-    plt.figure(figsize=(8, 5))
-    throughput_by_algorithm.plot(kind="bar", color="skyblue")
+    plt.figure(figsize=(9, 5.5))
+    colors = [ALGORITHM_COLORS.get(name, "#1f77b4") for name in throughput_by_algorithm.index]
+    bars = throughput_by_algorithm.plot(kind="bar", color=colors, edgecolor="black")
     plt.ylabel("Average Throughput (Mbps)")
     plt.title("Average Throughput by Algorithm (across scenarios)")
+    plt.grid(axis="y", linestyle="--", linewidth=0.6, alpha=0.7)
+    for bar in bars.patches:
+        height = bar.get_height()
+        plt.text(
+            bar.get_x() + bar.get_width() / 2,
+            height,
+            f"{height:.2f}",
+            ha="center",
+            va="bottom",
+            fontsize=9,
+            rotation=0,
+        )
     plt.tight_layout()
-    plt.savefig(output_dir / "throughput_vs_algorithm.png")
+    plt.savefig(output_dir / "throughput_vs_algorithm.png", dpi=200)
 
     fairness_by_scenario = df.groupby("Scenario")["Fairness"].mean()
-    plt.figure(figsize=(7, 4))
-    fairness_by_scenario.plot(kind="bar", color="lightgreen")
+    plt.figure(figsize=(9, 5))
+    fairness_colors = ["#8dd3c7", "#80b1d3", "#bebada"]
+    bars = fairness_by_scenario.plot(kind="bar", color=fairness_colors[: len(fairness_by_scenario)], edgecolor="black")
     plt.ylabel("Jain's Fairness Index")
     plt.title("Fairness Across Scenarios")
     plt.ylim(0, 1.0)
+    plt.grid(axis="y", linestyle="--", linewidth=0.6, alpha=0.7)
+    for bar in bars.patches:
+        height = bar.get_height()
+        plt.text(
+            bar.get_x() + bar.get_width() / 2,
+            height + 0.02,
+            f"{height:.2f}",
+            ha="center",
+            va="bottom",
+            fontsize=9,
+        )
     plt.tight_layout()
-    plt.savefig(output_dir / "fairness_vs_scenario.png")
+    plt.savefig(output_dir / "fairness_vs_scenario.png", dpi=200)
 
     if scenario_cwnd_series and scenario_time is not None:
-        plt.figure(figsize=(10, 5))
+        plt.figure(figsize=(11, 5.5))
         for name, series in scenario_cwnd_series.items():
-            plt.plot(scenario_time, series, label=name)
+            color = ALGORITHM_COLORS.get(name)
+            plot_kwargs = {"label": name, "linewidth": 1.6}
+            if color is not None:
+                plot_kwargs["color"] = color
+            plt.plot(scenario_time, series, **plot_kwargs)
         plt.xlabel("Time (s)")
         plt.ylabel("Congestion Window (packets)")
         plt.title("Congestion Window Evolution (Scenario 1)")
         plt.legend()
+        plt.grid(linestyle="--", linewidth=0.6, alpha=0.6)
         plt.tight_layout()
-        plt.savefig(output_dir / "cwnd_evolution_example.png")
+        plt.savefig(output_dir / "cwnd_evolution_example.png", dpi=220)
 
-        plt.figure(figsize=(10, 5))
+        plt.figure(figsize=(11, 5.5))
         for name, series in scenario_cwnd_series.items():
             series_array = np.asarray(series, dtype=float)
             max_value = float(series_array.max()) if series_array.size else 0.0
@@ -385,14 +421,19 @@ def main():
                 normalized_series = series_array / max_value
             else:
                 normalized_series = series_array
-            plt.plot(scenario_time, normalized_series, label=name)
+            color = ALGORITHM_COLORS.get(name)
+            plot_kwargs = {"label": name, "linewidth": 1.6}
+            if color is not None:
+                plot_kwargs["color"] = color
+            plt.plot(scenario_time, normalized_series, **plot_kwargs)
         plt.xlabel("Time (s)")
         plt.ylabel("Normalized Congestion Window")
         plt.title("Normalized Congestion Window Evolution (Scenario 1)")
         plt.ylim(0, 1.05)
         plt.legend()
+        plt.grid(linestyle="--", linewidth=0.6, alpha=0.6)
         plt.tight_layout()
-        plt.savefig(output_dir / "cwnd_evolution_normalized.png")
+        plt.savefig(output_dir / "cwnd_evolution_normalized.png", dpi=220)
 
     print("\nKey Observations:")
     df_sorted = df.sort_values(["Scenario", "Avg Throughput (Mbps)"], ascending=[True, False])
