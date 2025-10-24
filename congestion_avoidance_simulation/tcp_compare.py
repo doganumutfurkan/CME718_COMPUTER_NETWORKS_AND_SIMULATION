@@ -12,6 +12,13 @@ DT = 0.1  # seconds
 SIM_DURATION = 60.0  # seconds
 STEPS = int(SIM_DURATION / DT)
 RNG_SEED = 1337
+DEFAULT_COLORS = [
+    "#4C72B0",
+    "#55A868",
+    "#C44E52",
+    "#8172B2",
+    "#CCB974",
+]
 
 
 @dataclass(frozen=True)
@@ -284,7 +291,8 @@ def build_results_dataframe(
     cwnd_timeseries: Dict[str, Dict[str, List[float]]] = {}
 
     for scenario in scenarios:
-        summary, fairness, cwnd_series = simulate_scenario(scenario, rng)
+        scenario_rng = np.random.default_rng(rng.integers(0, 2**63 - 1))
+        summary, fairness, cwnd_series = simulate_scenario(scenario, scenario_rng)
         fairness_by_scenario[scenario.name] = fairness
         cwnd_timeseries[scenario.name] = cwnd_series
         for row in summary:
@@ -295,22 +303,27 @@ def build_results_dataframe(
 
 
 def plot_throughput(df: pd.DataFrame, output_dir: pathlib.Path) -> None:
-    agg = df.groupby("Algorithm")["Avg Throughput (Mbps)"].mean().sort_values(ascending=False)
-    fig, ax = plt.subplots(figsize=(8, 5), dpi=200)
-    bars = ax.bar(agg.index, agg.values, color="#4C72B0")
-    ax.set_ylabel("Average Throughput (Mbps)")
-    ax.set_title("Average Throughput Across Scenarios")
-    ax.grid(True, axis="y", linestyle="--", alpha=0.4)
-    ax.set_xticklabels(agg.index, rotation=20, ha="right")
-    for bar in bars:
-        ax.text(
-            bar.get_x() + bar.get_width() / 2.0,
-            bar.get_height(),
-            f"{bar.get_height():.1f}",
-            ha="center",
-            va="bottom",
-            fontsize=9,
+    agg = df.groupby(["Algorithm", "Scenario"])["Avg Throughput (Mbps)"].mean().unstack()
+    algorithms = agg.index.tolist()
+    scenarios = agg.columns.tolist()
+    indices = np.arange(len(algorithms))
+    width = 0.8 / max(len(scenarios), 1)
+    fig, ax = plt.subplots(figsize=(9, 5))
+    for offset, scenario_name in enumerate(scenarios):
+        values = agg[scenario_name].values
+        ax.bar(
+            indices + offset * width,
+            values,
+            width=width,
+            label=scenario_name,
+            color=DEFAULT_COLORS[offset % len(DEFAULT_COLORS)],
         )
+    ax.set_xticks(indices + width * (len(scenarios) - 1) / 2)
+    ax.set_xticklabels(algorithms, rotation=15, ha="right")
+    ax.set_ylabel("Average Throughput (Mbps)")
+    ax.set_title("Average Throughput by Algorithm and Scenario")
+    ax.legend()
+    ax.grid(True, axis="y", linestyle="--", alpha=0.3)
     fig.tight_layout()
     fig.savefig(output_dir / "throughput_vs_algorithm.png", bbox_inches="tight")
     plt.close(fig)
@@ -319,12 +332,12 @@ def plot_throughput(df: pd.DataFrame, output_dir: pathlib.Path) -> None:
 def plot_fairness(fairness: Dict[str, float], output_dir: pathlib.Path) -> None:
     scenarios = list(fairness.keys())
     values = [fairness[name] for name in scenarios]
-    fig, ax = plt.subplots(figsize=(7, 4.5), dpi=200)
-    ax.plot(scenarios, values, marker="o", linewidth=2.5, color="#55A868")
+    fig, ax = plt.subplots(figsize=(7, 4.5))
+    ax.bar(scenarios, values, color=DEFAULT_COLORS[: len(scenarios)])
     ax.set_ylim(0, 1.05)
     ax.set_ylabel("Jain's Fairness Index")
     ax.set_title("Fairness Across Scenarios")
-    ax.grid(True, linestyle=":", alpha=0.5)
+    ax.grid(True, axis="y", linestyle="--", alpha=0.3)
     fig.tight_layout()
     fig.savefig(output_dir / "fairness_vs_scenario.png", bbox_inches="tight")
     plt.close(fig)
@@ -337,17 +350,16 @@ def plot_cwnd_example(
 ) -> None:
     series = cwnd_timeseries[scenario_name]
     time_axis = np.linspace(0.0, SIM_DURATION, num=STEPS)
-    fig, axes = plt.subplots(len(series), 1, figsize=(9, 11), sharex=True, dpi=220)
-    if len(series) == 1:
-        axes = [axes]
-    for ax, (algo, values) in zip(axes, series.items()):
-        ax.plot(time_axis, values, linewidth=1.8)
-        ax.set_ylabel("CWND (packets)")
-        ax.set_title(algo)
-        ax.grid(True, linestyle="--", alpha=0.4)
-    axes[-1].set_xlabel("Time (s)")
-    fig.suptitle(f"Congestion Window Evolution — {scenario_name}", fontsize=14, y=0.98)
-    fig.tight_layout(rect=[0, 0, 1, 0.97])
+    fig, ax = plt.subplots(figsize=(9, 5.5))
+    for idx, (algo, values) in enumerate(series.items()):
+        color = DEFAULT_COLORS[idx % len(DEFAULT_COLORS)]
+        ax.plot(time_axis, values, label=algo, linewidth=1.8, color=color)
+    ax.set_xlabel("Time (s)")
+    ax.set_ylabel("CWND (packets)")
+    ax.set_title(f"Congestion Window Evolution — {scenario_name}")
+    ax.grid(True, linestyle="--", alpha=0.35)
+    ax.legend(loc="upper right")
+    fig.tight_layout()
     fig.savefig(output_dir / "cwnd_evolution_example.png", bbox_inches="tight")
     plt.close(fig)
 
