@@ -12,6 +12,8 @@ DT = 0.1  # seconds
 SIM_DURATION = 300.0  # seconds
 STEPS = int(SIM_DURATION / DT)
 RNG_SEED = 1337
+CAP_MULTIPLIER = 1.5
+CAP_EXTRA_PACKETS = 24.0
 DEFAULT_COLORS = [
     "#4C72B0",
     "#55A868",
@@ -313,7 +315,9 @@ def simulate_scenario(
     )
     flow_share = max(len(ALGORITHM_COLOR_ORDER), 1)
     shared_cap = bdp_packets / flow_share
-    cwnd_cap = max(1.0, 1.2 * shared_cap)
+    scaled_cap = shared_cap * CAP_MULTIPLIER
+    offset_cap = shared_cap + CAP_EXTRA_PACKETS
+    cwnd_cap = max(1.0, min(scaled_cap, offset_cap))
 
     flows: List[TCPFlow] = [
         TCPTahoe(scenario.rtt_ms, cwnd_cap=cwnd_cap),
