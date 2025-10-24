@@ -1,5 +1,6 @@
 import math
 import pathlib
+import re
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Sequence, Tuple
 
@@ -55,6 +56,12 @@ def configure_matplotlib() -> None:
             "ytick.labelsize": 11,
         }
     )
+
+
+def scenario_slug(name: str) -> str:
+    slug = re.sub(r"[^0-9a-zA-Z]+", "_", name.strip().lower())
+    slug = re.sub(r"_+", "_", slug).strip("_")
+    return slug or "scenario"
 
 
 @dataclass(frozen=True)
@@ -488,6 +495,7 @@ def plot_cwnd_example(
     scenario_name: str,
 ) -> None:
     series = cwnd_timeseries[scenario_name]
+    slug = scenario_slug(scenario_name)
     time_axis = np.linspace(0.0, SIM_DURATION, num=STEPS)
     fig, ax = plt.subplots(figsize=(11, 6), dpi=180)
     for idx, (algo, values) in enumerate(series.items()):
@@ -509,7 +517,11 @@ def plot_cwnd_example(
     ax.spines["left"].set_color("#444444")
     ax.spines["bottom"].set_color("#444444")
     fig.tight_layout()
-    fig.savefig(output_dir / "cwnd_evolution_example.png", bbox_inches="tight")
+    fig.savefig(
+        output_dir / f"cwnd_evolution_example_{slug}.png", bbox_inches="tight"
+    )
+    if slug == "scenario_1":
+        fig.savefig(output_dir / "cwnd_evolution_example.png", bbox_inches="tight")
     plt.close(fig)
 
 
@@ -519,6 +531,7 @@ def plot_cwnd_per_algorithm(
     scenario_name: str,
 ) -> None:
     series = cwnd_timeseries[scenario_name]
+    slug = scenario_slug(scenario_name)
     time_axis = np.linspace(0.0, SIM_DURATION, num=STEPS)
     algorithms = [algo for algo in ALGORITHM_COLOR_ORDER if algo in series]
     n_algos = len(algorithms)
@@ -547,7 +560,11 @@ def plot_cwnd_per_algorithm(
             ax.set_xlabel("Time (s)")
     fig.suptitle(f"Per-Algorithm CWND Evolution — {scenario_name}", fontsize=14)
     fig.tight_layout(rect=[0, 0, 1, 0.96])
-    fig.savefig(output_dir / "cwnd_evolution_panels.png", bbox_inches="tight")
+    fig.savefig(
+        output_dir / f"cwnd_evolution_panels_{slug}.png", bbox_inches="tight"
+    )
+    if slug == "scenario_1":
+        fig.savefig(output_dir / "cwnd_evolution_panels.png", bbox_inches="tight")
     plt.close(fig)
 
 
@@ -580,14 +597,17 @@ SAMPLE_PARAMETER_SETS = [
 
 
 def main() -> None:
-    output_dir = pathlib.Path(__file__).resolve().parent
+    project_root = pathlib.Path(__file__).resolve().parent
+    output_dir = project_root / "findings"
+    output_dir.mkdir(parents=True, exist_ok=True)
     configure_matplotlib()
     rng = np.random.default_rng(RNG_SEED)
 
     scenarios = [
-        Scenario("Scenario 1", 50, 40, 0.1),
-        Scenario("Scenario 2", 20, 150, 0.5),
-        Scenario("Scenario 3", 100, 50, 1.0),
+        Scenario("Broadband Validation", 50, 40, 0.1),
+        Scenario("High-Delay Queue", 20, 150, 0.5),
+        Scenario("Wireless-Like Loss", 30, 80, 1.2),
+        Scenario("Data-Center Stress", 100, 25, 0.2),
     ]
 
     df, fairness, cwnd_timeseries = build_results_dataframe(scenarios, rng)
@@ -623,8 +643,9 @@ def main() -> None:
 
     plot_throughput(df, output_dir)
     plot_fairness(fairness, output_dir)
-    plot_cwnd_example(cwnd_timeseries, output_dir, "Scenario 1")
-    plot_cwnd_per_algorithm(cwnd_timeseries, output_dir, "Scenario 1")
+    for scenario in scenarios:
+        plot_cwnd_example(cwnd_timeseries, output_dir, scenario.name)
+        plot_cwnd_per_algorithm(cwnd_timeseries, output_dir, scenario.name)
     plt.show()
 
 
