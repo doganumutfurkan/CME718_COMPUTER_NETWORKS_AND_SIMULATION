@@ -75,7 +75,10 @@ class TCPFlow:
         self.rtt_sec = rtt_ms / 1000.0
         self.mss_bytes = mss_bytes
         self.cwnd = 1.0
-        self.ssthresh = 64.0
+        if cwnd_cap is not None:
+            self.ssthresh = min(64.0, max(cwnd_cap, 1.0))
+        else:
+            self.ssthresh = 64.0
         self.cwnd_cap = cwnd_cap
 
     # --- helper methods -------------------------------------------------
@@ -308,7 +311,9 @@ def simulate_scenario(
     bdp_packets = (
         scenario.bandwidth_mbps * 1e6 * (scenario.rtt_ms / 1000.0) / (MSS_BYTES * 8.0)
     )
-    cwnd_cap = max(1.0, 1.1 * bdp_packets)
+    flow_share = max(len(ALGORITHM_COLOR_ORDER), 1)
+    shared_cap = bdp_packets / flow_share
+    cwnd_cap = max(1.0, 1.2 * shared_cap)
 
     flows: List[TCPFlow] = [
         TCPTahoe(scenario.rtt_ms, cwnd_cap=cwnd_cap),
