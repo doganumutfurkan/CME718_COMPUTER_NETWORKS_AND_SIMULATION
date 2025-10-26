@@ -7,12 +7,14 @@ This module implements a discrete-time simulator that contrasts five TCP congest
 ```
 congestion_avoidance_simulation/
 ├── tcp_compare.py           # Main entry point for running simulations
+├── placeholder.txt          # Reserved for additional notes/resources
 ├── findings/                # Auto-generated outputs from the simulator
 │   ├── results.csv          # Tabulated metrics per algorithm and scenario
 │   ├── throughput_vs_algorithm.png
 │   ├── fairness_vs_scenario.png
 │   ├── cwnd_evolution_example_<scenario>.png
-│   └── cwnd_evolution_panels_<scenario>.png
+│   ├── cwnd_evolution_panels_<scenario>.png
+│   └── cwnd_evolution_<algorithm>_<scenario>.png
 └── README.md                # Detailed usage and interpretation guide
 ```
 
@@ -69,11 +71,15 @@ Displays Jain's fairness index per scenario. Higher bars indicate more equitable
 
 ### Combined Congestion Window Evolution — `findings/cwnd_evolution_example_<scenario>.png`
 
-High-DPI line charts overlaying the congestion window progression of all algorithms. One file is produced per scenario so you can compare how the dynamics shift under different bandwidth, RTT, and loss conditions. (For backward compatibility, `cwnd_evolution_example.png` continues to mirror Scenario 1.)
+High-DPI line charts overlaying the congestion window progression of all algorithms. One file is produced per scenario so you can compare how the dynamics shift under different bandwidth, RTT, and loss conditions. For backward compatibility, the first scenario also emits `cwnd_evolution_example.png` without the slug suffix.
 
 ### Per-Algorithm Congestion Window Panels — `findings/cwnd_evolution_panels_<scenario>.png`
 
-Scenario-specific grids of subplots—one per algorithm—provide a focused look at the same time series. These panels are ideal for presentations where you need to comment on the dynamics of individual protocols without clutter from others. Scenario 1 still produces the legacy filename `cwnd_evolution_panels.png` in addition to the suffixed version.
+Scenario-specific grids of subplots—one per algorithm—provide a focused look at the same time series. These panels are ideal for presentations where you need to comment on the dynamics of individual protocols without clutter from others. The first scenario still produces the legacy filename `cwnd_evolution_panels.png` in addition to the suffixed version.
+
+### Individual Congestion Window Profiles — `findings/cwnd_evolution_<algorithm>_<scenario>.png`
+
+For deep dives into a specific TCP variant, the simulator now exports single-series plots for every algorithm within each scenario. These images isolate one flow per figure, using the same color palette so you can annotate or compare behaviors without manual cropping. Legacy filenames like `cwnd_evolution_tcp_tahoe.png` remain available for users who still reference the first scenario’s historical outputs.
 
 ## Customizing Scenarios
 

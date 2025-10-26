@@ -64,6 +64,10 @@ def scenario_slug(name: str) -> str:
     return slug or "scenario"
 
 
+def algorithm_slug(name: str) -> str:
+    return scenario_slug(name)
+
+
 @dataclass(frozen=True)
 class Scenario:
     name: str
@@ -493,6 +497,7 @@ def plot_cwnd_example(
     cwnd_timeseries: Dict[str, Dict[str, List[float]]],
     output_dir: pathlib.Path,
     scenario_name: str,
+    is_primary: bool = False,
 ) -> None:
     series = cwnd_timeseries[scenario_name]
     slug = scenario_slug(scenario_name)
@@ -520,7 +525,7 @@ def plot_cwnd_example(
     fig.savefig(
         output_dir / f"cwnd_evolution_example_{slug}.png", bbox_inches="tight"
     )
-    if slug == "scenario_1":
+    if is_primary:
         fig.savefig(output_dir / "cwnd_evolution_example.png", bbox_inches="tight")
     plt.close(fig)
 
@@ -529,6 +534,7 @@ def plot_cwnd_per_algorithm(
     cwnd_timeseries: Dict[str, Dict[str, List[float]]],
     output_dir: pathlib.Path,
     scenario_name: str,
+    is_primary: bool = False,
 ) -> None:
     series = cwnd_timeseries[scenario_name]
     slug = scenario_slug(scenario_name)
@@ -563,9 +569,43 @@ def plot_cwnd_per_algorithm(
     fig.savefig(
         output_dir / f"cwnd_evolution_panels_{slug}.png", bbox_inches="tight"
     )
-    if slug == "scenario_1":
+    if is_primary:
         fig.savefig(output_dir / "cwnd_evolution_panels.png", bbox_inches="tight")
     plt.close(fig)
+
+
+def plot_cwnd_individual(
+    cwnd_timeseries: Dict[str, Dict[str, List[float]]],
+    output_dir: pathlib.Path,
+    scenario_name: str,
+    is_primary: bool = False,
+) -> None:
+    series = cwnd_timeseries[scenario_name]
+    scenario_id = scenario_slug(scenario_name)
+    time_axis = np.linspace(0.0, SIM_DURATION, num=STEPS)
+    for idx, (algorithm, values) in enumerate(series.items()):
+        color = ALGORITHM_COLORS.get(algorithm, DEFAULT_COLORS[idx % len(DEFAULT_COLORS)])
+        fig, ax = plt.subplots(figsize=(10, 4.8), dpi=180)
+        ax.plot(time_axis, values, color=color, linewidth=2.3)
+        ax.set_title(f"{algorithm} CWND — {scenario_name}")
+        ax.set_xlabel("Time (s)")
+        ax.set_ylabel("CWND (packets)")
+        ax.grid(True, linestyle="--", alpha=0.35)
+        ax.set_facecolor("#fdfdfd")
+        ax.spines["left"].set_color("#444444")
+        ax.spines["bottom"].set_color("#444444")
+        fig.tight_layout()
+        algo_id = algorithm_slug(algorithm)
+        fig.savefig(
+            output_dir
+            / f"cwnd_evolution_{algo_id}_{scenario_id}.png",
+            bbox_inches="tight",
+        )
+        if is_primary:
+            fig.savefig(
+                output_dir / f"cwnd_evolution_{algo_id}.png", bbox_inches="tight"
+            )
+        plt.close(fig)
 
 
 SAMPLE_PARAMETER_SETS = [
@@ -628,6 +668,11 @@ def main() -> None:
         print(f"  {name}: {value:.3f}")
     print()
 
+    print("Sample parameter sets for further experimentation:")
+    sample_df = pd.DataFrame(SAMPLE_PARAMETER_SETS)
+    print(sample_df.to_string(index=False))
+    print()
+
     throughput_order = df.groupby("Algorithm")["Avg Throughput (Mbps)"].mean().sort_values(ascending=False)
     leading = throughput_order.index[0]
     trailing = throughput_order.index[-1]
@@ -638,9 +683,17 @@ def main() -> None:
 
     plot_throughput(df, output_dir)
     plot_fairness(fairness, output_dir)
-    for scenario in scenarios:
-        plot_cwnd_example(cwnd_timeseries, output_dir, scenario.name)
-        plot_cwnd_per_algorithm(cwnd_timeseries, output_dir, scenario.name)
+    for index, scenario in enumerate(scenarios):
+        is_primary = index == 0
+        plot_cwnd_example(
+            cwnd_timeseries, output_dir, scenario.name, is_primary=is_primary
+        )
+        plot_cwnd_per_algorithm(
+            cwnd_timeseries, output_dir, scenario.name, is_primary=is_primary
+        )
+        plot_cwnd_individual(
+            cwnd_timeseries, output_dir, scenario.name, is_primary=is_primary
+        )
     plt.show()
 
 
